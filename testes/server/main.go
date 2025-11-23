@@ -19,6 +19,11 @@ func main() {
 	fmt.Println("Todos os logs estão sendo escritos em 'server.log'.")
 	fmt.Println("Pressione Ctrl+C para encerrar.")
 
-	server := NewServer()
+	// Define as opções de voto aqui
+	opcoes := []string{"A", "B", "C"}
+
+	// Inicia o servidor (true para modo assíncrono rápido, false para bloqueante lento)
+	// Passa a lista de opções
+	server := NewServer(true, opcoes)
 	server.Start(":9000")
 }
