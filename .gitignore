@@ -1,0 +1,35 @@
+# Binários compilados
+/bin/
+/cmd/server/server
+/cmd/client/client
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs
+/logs/*.log
+!logs/.gitkeep
+
+# Arquivos de teste
+*.test
+*.out
+
+# Go
+go.work
+go.work.sum
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Arquivos temporários
+*.tmp
+*.bak
+
+# Arquivos do SO
+.DS_Store
+Thumbs.db
