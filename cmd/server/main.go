@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/yLukas077/tcp-vote/internal/server"
 )
@@ -19,13 +20,19 @@ func main() {
 
 	fmt.Println("=== SERVIDOR TCP DE VOTAÇÃO ===")
 	fmt.Println("Logs: logs/server.log")
-	fmt.Println("Modo: Assíncrono (Channel + Worker)")
-	fmt.Println("Pressione Ctrl+C para encerrar.")
+	fmt.Println("Modo: Assíncrono (Worker)")
 
 	// Opções de voto configuráveis
 	opcoes := []string{"A", "B", "C"}
-	
 	// Inicia servidor em modo assíncrono (true = non-blocking broadcast)
 	srv := server.NewServer(true, opcoes)
+
+	// Inicia votação após 5 segundos com duração de 60 segundos
+    go func() {
+        time.Sleep(5 * time.Second)
+        fmt.Println("Iniciando votação (120 segundos)...")
+        srv.StartVoting(120)
+    }()
+
 	srv.Start(":9000")
 }

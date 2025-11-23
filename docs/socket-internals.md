@@ -96,44 +96,82 @@ Eficiência cresce *ordens de magnitude*.
 
 ---
 
-## 5. O Perigo Real: Mutex + Write Bloqueante
+## 5. O Problema Real: Mutex + Write Bloqueante
 
-Se você fizer:
-
-```
-mu.Lock()
-conn.Write()  // pode bloquear por segundos!
-mu.Unlock()
-```
-
-E esse cliente estiver lento:
-
-* A goroutine que segura o mutex **congela**.
-* Todas as outras goroutines que precisam do mutex **travam também**.
-* Nenhum voto é processado.
-* Servidor **para completamente**, mesmo com 1 cliente problemático.
-
-### ⚠️ Pré-requisito para o ataque funcionar
-
-**O cliente malicioso PRECISA votar primeiro** para entrar na lista de broadcast:
+### ❌ Design Problemático
 
 ```go
-// Cliente se conecta
-conn, _ := net.Dial("tcp", "localhost:9000")
-
-// Registra ID
-fmt.Fprintf(conn, "ATTACKER\n")
-
-// CRÍTICO: Vota para receber broadcasts
-fmt.Fprintf(conn, "VOTE A\n")
-
-// Agora para de ler → TCP buffer enche → write() bloqueia
-time.Sleep(∞)
+mu.Lock()
+for _, conn := range clients {
+    conn.Write(data)  // BLOQUEIA se buffer do cliente estiver cheio
+}
+mu.Unlock()  // Nunca executado durante bloqueio
 ```
 
-**Se o cliente não votar**, ele nunca receberá `conn.Write()` e portanto **não travará o servidor**.
+**O que acontece:**
 
-Esse é **um dos bugs mais comum em servidores**.
+1. Cliente **para de chamar `read()`** (pode ser por qualquer motivo: CPU ocupada, rede congestionada, app pausado)
+2. TCP receive buffer do cliente **enche** (típico: 128KB)
+3. Servidor tenta enviar **256KB** (maior que buffer disponível)
+4. Kernel **retorna EAGAIN/EWOULDBLOCK** → Go bloqueia a goroutine
+5. Mutex **permanece travado** durante bloqueio
+6. **TODAS as outras votações param** (precisam do mutex)
+
+**Isso NÃO é um ataque, é TCP funcionando corretamente!**
+
+### 🎯 Por que o Teste Usa Payload de 256KB?
+
+**Motivo técnico:** Broadcasts pequenos (~30 bytes) levam **milhares de mensagens** para encher buffer TCP de 128KB.
+
+**Solução para teste:** Enviar **256KB por broadcast** (maior que buffer):
+
+```go
+padding := strings.Repeat("\x00", 256*1024)  // 256KB
+msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", voteCounts, padding)
+```
+
+**Resultado:**
+- **1ª ou 2ª mensagem** já excede capacidade do buffer
+- `write()` **bloqueia imediatamente**
+- Demonstra problema de design **rapidamente**
+
+**Cenários reais equivalentes:**
+- Servidores de jogos: snapshots completos de estado (50-500KB)
+- Sistemas de log: buffers agregados (100KB-1MB)
+- APIs de streaming: chunks de vídeo/dados (256KB-2MB)
+
+### ⚠️ Pré-requisito do Teste
+
+Cliente precisa **votar primeiro** para entrar na lista de broadcast:
+
+```go
+fmt.Fprintf(conn, "VOTE A\n")  // Entra na lista
+time.Sleep(∞)                   // Para de ler
+```
+
+Se não votar, servidor nunca chama `conn.Write()` nele.
+
+### ✅ Solução Arquitetural
+
+```go
+mu.Lock()
+snapshot := copy(state)  // Microssegundos
+mu.Unlock()              // Liberado ANTES do I/O
+
+broadcastChan <- snapshot  // Worker faz I/O separadamente
+```
+
+**Worker isolado:**
+```go
+for update := range broadcastChan {
+    conn.Write(update)  // Pode bloquear, mas mutex já foi liberado
+}
+```
+
+**Resultado:**
+- Mutex travado por **< 100 microssegundos**
+- Votações **continuam mesmo com buffers cheios**
+- Worker bloqueia **isoladamente** sem afetar sistema
 
 ---
 

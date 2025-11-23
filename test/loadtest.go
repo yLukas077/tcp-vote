@@ -38,7 +38,7 @@ func fastClient(id int, wg *sync.WaitGroup) {
 
 // slowClient simula cliente malicioso que nunca lê dados (ataque DoS).
 // TCP receive buffer enche -> sliding window = 0 -> servidor bloqueia em write()
-func slowClient(wg *sync.WaitGroup) {
+func blockedClient(wg *sync.WaitGroup) {
 	defer wg.Done()
 	
 	conn, err := net.Dial("tcp", "localhost:9000")
@@ -48,13 +48,13 @@ func slowClient(wg *sync.WaitGroup) {
 	}
 	defer conn.Close()
 
-	fmt.Fprintf(conn, "SLOW_CLIENT\n")
+	fmt.Fprintf(conn, "BLOCKED_CLIENT\n")
 	// Lê mensagem de boas-vindas
     bufio.NewReader(conn).ReadString('\n')
     
     // Vota para entrar na lista de broadcast
     fmt.Fprintf(conn, "VOTE A\n")
-    fmt.Println(">>> Cliente Lento VOTOU e agora NUNCA lê dados <<<")
+    fmt.Println(">>> Cliente parou de ler -> buffer TCP vai encher <<<")
 
     // Nunca lê do socket → buffer enche → trava write()
 	time.Sleep(999 * time.Hour)
@@ -63,12 +63,11 @@ func slowClient(wg *sync.WaitGroup) {
 func main() {
 	var wg sync.WaitGroup
 
-	fmt.Println("=== TESTE DE CARGA TCP ===")
-	fmt.Println("Objetivo: Demonstrar impacto de cliente lento no servidor")
-
+	fmt.Println("=== TESTE DE BROADCAST COM BUFFER CHEIO ===")
+    fmt.Println("Objetivo: Demonstrar bloqueio em write() com mutex travado")
 	// Cliente sabotador (trava buffer TCP)
 	wg.Add(1)
-	go slowClient(&wg)
+	go blockedClient(&wg)
 	time.Sleep(1 * time.Second)
 
 	// Clientes normais (geram votos e broadcasts)
@@ -81,8 +80,8 @@ func main() {
 	}
 
 	fmt.Println("\nTeste rodando. Observe os logs do servidor.")
-	fmt.Println("Modo bloqueante: servidor congela")
-	fmt.Println("Modo assíncrono: servidor permanece responsivo")
+	fmt.Println("Modo sync: servidor BLOQUEIA ao enviar para cliente com buffer cheio")
+    fmt.Println("Modo async: servidor CONTINUA processando (worker bloqueia isoladamente)")
 	
 	wg.Wait()
 }

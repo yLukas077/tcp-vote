@@ -145,31 +145,70 @@ go build -o bin/client cmd/client/main.go
 
 ## 🧪 Load Testing <a name="load_testing"></a>
 
-### Running the Load Test
+### Running the Test
 
 ```bash
 go run test/loadtest.go
 ```
 
-**What it does:**
-- Spawns 1 "slow client" that **votes first, then stops reading data** (simulates Slow Read DoS attack)
-- Spawns 50 "fast clients" that vote and read broadcasts normally
-- Demonstrates the difference between sync and async modes
+**What it demonstrates:**
 
-**Attack mechanism:**
-1. Slow client connects and **sends a vote** (enters broadcast list)
-2. Slow client **stops calling `read()`** on the socket
-3. TCP receive buffer fills up (typically 64KB)
-4. Kernel advertises Window Size = 0 to server
-5. Server's `write()` blocks indefinitely waiting for buffer space
-6. **In sync mode:** Mutex remains locked → entire server freezes
-7. **In async mode:** Only worker goroutine blocks → voting continues
+The test simulates a **real production scenario** where a client stops reading from its TCP socket (common causes: CPU overload, network congestion, application pause).
+
+**Test setup:**
+- 1 client that **stops calling `read()`** after voting (buffer fills naturally)
+- 50 normal clients that vote and read broadcasts
+- Server sends **256KB broadcast messages** (realistic payload size)
+
+**What happens:**
+
+1. Blocked client **votes** (enters broadcast recipient list)
+2. Client **stops reading** from socket
+3. TCP receive buffer fills (typical: 128KB capacity)
+4. Server attempts to send 256KB broadcast
+5. Kernel blocks `write()` syscall (standard TCP flow control)
+6. **In sync mode:** Mutex remains locked → **entire server freezes**
+7. **In async mode:** Only worker goroutine blocks → **voting continues normally**
 
 **Expected behavior:**
-- **Async Mode (default):** Server remains responsive despite slow client
-- **Sync Mode:** Server freezes after first fast client vote (when broadcasting to slow client)
 
-**Key insight:** The slow client **must vote** to trigger the problem. Without voting, it won't receive broadcasts and therefore won't block `write()` calls.
+| Mode | Result |
+|------|--------|
+| **Sync** | Server **freezes** when trying to send to blocked client (mutex locked during I/O) |
+| **Async** | Server **remains responsive** (worker blocks independently) |
+
+**Key insight:** This is **not an attack** — it's TCP working as designed. The problem is the **server's architectural flaw** of holding a mutex during blocking I/O operations.
+
+### Why 256KB Payload?
+
+Normal broadcasts (~30 bytes) would require **thousands of messages** to fill a 128KB TCP buffer.
+
+**Solution:** Use realistic large payloads (256KB) similar to:
+- Game servers: state snapshots (50-500KB)
+- Log aggregation: batched events (100KB-1MB)
+- Video streaming: data chunks (256KB-2MB)
+
+This demonstrates the architectural problem **immediately** rather than after prolonged testing.
+
+### Activating Large Payload Mode
+
+**Sync mode** (already active):
+```go
+// internal/server/server.go line ~310
+padding := strings.Repeat("\x00", 256*1024)
+msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", s.voteCounts, padding)
+```
+
+**Async mode** (commented by default):
+```go
+// internal/server/server.go line ~335
+// Uncomment these lines:
+padding := strings.Repeat("\x00", 256*1024)
+msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", update, padding)
+
+// Comment this line:
+// msg := fmt.Sprintf("UPDATE: %v\n", update)
+```
 
 ---
 
