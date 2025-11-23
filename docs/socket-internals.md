@@ -113,7 +113,27 @@ E esse cliente estiver lento:
 * Nenhum voto é processado.
 * Servidor **para completamente**, mesmo com 1 cliente problemático.
 
-Esse é **o bug mais comum em servidores Go iniciantes**.
+### ⚠️ Pré-requisito para o ataque funcionar
+
+**O cliente malicioso PRECISA votar primeiro** para entrar na lista de broadcast:
+
+```go
+// Cliente se conecta
+conn, _ := net.Dial("tcp", "localhost:9000")
+
+// Registra ID
+fmt.Fprintf(conn, "ATTACKER\n")
+
+// CRÍTICO: Vota para receber broadcasts
+fmt.Fprintf(conn, "VOTE A\n")
+
+// Agora para de ler → TCP buffer enche → write() bloqueia
+time.Sleep(∞)
+```
+
+**Se o cliente não votar**, ele nunca receberá `conn.Write()` e portanto **não travará o servidor**.
+
+Esse é **um dos bugs mais comum em servidores**.
 
 ---
 

@@ -49,9 +49,14 @@ func slowClient(wg *sync.WaitGroup) {
 	defer conn.Close()
 
 	fmt.Fprintf(conn, "SLOW_CLIENT\n")
-	fmt.Println(">>> Cliente Lento conectado - nunca lê dados <<<")
+	// Lê mensagem de boas-vindas
+    bufio.NewReader(conn).ReadString('\n')
+    
+    // Vota para entrar na lista de broadcast
+    fmt.Fprintf(conn, "VOTE A\n")
+    fmt.Println(">>> Cliente Lento VOTOU e agora NUNCA lê dados <<<")
 
-	// Nunca lê do socket -> trava servidor em modo bloqueante
+    // Nunca lê do socket → buffer enche → trava write()
 	time.Sleep(999 * time.Hour)
 }
 

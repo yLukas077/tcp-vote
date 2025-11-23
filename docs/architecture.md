@@ -99,6 +99,16 @@ Server {
 * Se um cliente for lento → trava todos.
 * Baixo throughput.
 
+**Importante:** Apenas clientes que **já votaram** recebem broadcasts. Isso é implementado pela verificação:
+
+```go
+for id, conn := range s.clients {
+    if _, votou := s.votes[id]; votou {  // ← Filtro crítico
+        conn.Write(msgBytes)
+    }
+}
+```
+
 ### Async (Recomendado)
 
 * Captura do snapshot sob mutex.

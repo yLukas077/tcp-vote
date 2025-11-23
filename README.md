@@ -152,13 +152,24 @@ go run test/loadtest.go
 ```
 
 **What it does:**
-- Spawns 1 "slow client" that never reads data (simulates DoS attack)
+- Spawns 1 "slow client" that **votes first, then stops reading data** (simulates Slow Read DoS attack)
 - Spawns 50 "fast clients" that vote and read broadcasts normally
 - Demonstrates the difference between sync and async modes
 
+**Attack mechanism:**
+1. Slow client connects and **sends a vote** (enters broadcast list)
+2. Slow client **stops calling `read()`** on the socket
+3. TCP receive buffer fills up (typically 64KB)
+4. Kernel advertises Window Size = 0 to server
+5. Server's `write()` blocks indefinitely waiting for buffer space
+6. **In sync mode:** Mutex remains locked → entire server freezes
+7. **In async mode:** Only worker goroutine blocks → voting continues
+
 **Expected behavior:**
 - **Async Mode (default):** Server remains responsive despite slow client
-- **Sync Mode:** Server freezes when trying to broadcast to slow client
+- **Sync Mode:** Server freezes after first fast client vote (when broadcasting to slow client)
+
+**Key insight:** The slow client **must vote** to trigger the problem. Without voting, it won't receive broadcasts and therefore won't block `write()` calls.
 
 ---
 

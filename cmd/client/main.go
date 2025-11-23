@@ -35,8 +35,8 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	// Handshake: envia ID do cliente
-	fmt.Print("Digite seu ID para entrar: ")
+	// Handshake: envia NOME do cliente
+	fmt.Print("Digite seu NOME para entrar: ")
 	scanner.Scan()
 	id := scanner.Text()
 	
