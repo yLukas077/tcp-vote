@@ -59,6 +59,16 @@ It is built specifically as an educational project to demonstrate critical aspec
 
 The server maintains active TCP client connections, individual votes, aggregated vote counts, and broadcasts updates in real-time according to the selected operational mode.
 
+### 🔌 Socket vs File Descriptor
+
+In this codebase:
+- **Socket** = the TCP network connection itself (what you see in Go: `net.Conn`)
+- **File Descriptor (FD)** = the underlying Unix integer handle (3, 4, 5...) that the kernel uses to track each socket
+
+Every TCP socket is represented by a file descriptor. When we say "the server creates a new FD per client", we mean each `Accept()` syscall returns a unique integer identifier that the OS uses to manage that specific socket connection.
+
+**Key point:** In Unix, "everything is a file" — sockets are just special file descriptors for network I/O.
+
 ---
 
 ## 🏁 Getting Started <a name="getting_started"></a>

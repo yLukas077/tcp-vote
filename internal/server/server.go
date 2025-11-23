@@ -17,9 +17,10 @@ type VotingOptions struct {
 
 // Server representa o servidor TCP de votação concorrente.
 type Server struct {
-	// SYSCALL: socket(AF_INET, SOCK_STREAM, 0) + bind() + listen()
-	// listener é o file descriptor em estado LISTEN aguardando SYN packets
-	listener net.Listener
+    // SYSCALL: socket(AF_INET, SOCK_STREAM, 0) + bind() + listen()
+    // listener é o socket em estado LISTEN aguardando SYN packets
+    // Internamente, o kernel usa um file descriptor (FD) para rastrear este socket
+    listener net.Listener
 
 	// Mutex protege acesso concorrente aos mapas compartilhados
 	// Previne race conditions em leituras/escritas simultâneas
@@ -84,8 +85,8 @@ func (s *Server) Start(port string) {
 	for {
 		// SYSCALL: accept(listener_fd, &client_addr, &addr_len)
 		// Bloqueia até conexão disponível na Accept queue
-		// Kernel cria NOVO file descriptor para a conexão do cliente
-		// Retorna net.Conn (wrapper Go do fd)
+		// Kernel cria NOVO socket (e seu FD correspondente) para cada cliente
+		// net.Conn é o wrapper Go deste socket TCP
 		conn, err := s.listener.Accept()
 		if err != nil {
 			log.Println("Erro no accept:", err)
@@ -109,6 +110,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 
 	// SYSCALL: read(fd, buffer, size) - bloqueante se não há dados
+	// Lê do socket TCP (internamente usando o FD do kernel)
 	idStr, err := reader.ReadString('\n')
 	if err != nil {
 		return

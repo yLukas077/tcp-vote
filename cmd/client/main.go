@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	// SYSCALL: socket() + connect() - estabelece conexão TCP com servidor
+	// SYSCALL: socket() + connect() - cria socket TCP e estabelece conexão com servidor
+    // Kernel cria um file descriptor (FD) para rastrear este socket
 	conn, err := net.Dial("tcp", "localhost:9000")
 	if err != nil {
 		fmt.Println("Erro ao conectar:", err)
@@ -27,7 +28,7 @@ func main() {
 			fmt.Println("\n[SERVIDOR]:", scanner.Text())
 			fmt.Print(">> ")
 		}
-		// Servidor encerrou conexão
+		// Servidor encerrou conexão (close do FD remoto)
 		fmt.Println("\nConexão com o servidor encerrada.")
 		os.Exit(0)
 	}()
@@ -39,7 +40,7 @@ func main() {
 	scanner.Scan()
 	id := scanner.Text()
 	
-	// SYSCALL: write(fd, buffer, len) - envia dados ao servidor
+	// SYSCALL: write(fd, buffer, len) - escreve no socket TCP usando seu FD
 	fmt.Fprintf(conn, "%s\n", id)
 
 	// Loop de envio de comandos
