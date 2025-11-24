@@ -20,7 +20,7 @@ func main() {
 
 	fmt.Println("=== SERVIDOR TCP DE VOTAÇÃO ===")
 	fmt.Println("Logs: logs/server.log")
-	fmt.Println("Modo: Assíncrono (Worker)")
+	fmt.Println("Modo: Assíncrono (Chanells + Worker)")
 
 	// Opções de voto configuráveis
 	opcoes := []string{"A", "B", "C"}
