@@ -10,13 +10,12 @@ import (
 	"time"
 )
 
-
 type VotingState string
 
 const (
-    VotingNotStarted VotingState = "NOT_STARTED"
-    VotingActive     VotingState = "ACTIVE"
-    VotingEnded      VotingState = "ENDED"
+	VotingNotStarted VotingState = "NOT_STARTED"
+	VotingActive     VotingState = "ACTIVE"
+	VotingEnded      VotingState = "ENDED"
 )
 
 // VotingOptions encapsula as opções de voto disponíveis.
@@ -27,10 +26,10 @@ type VotingOptions struct {
 
 // Server representa o servidor TCP de votação concorrente.
 type Server struct {
-    // SYSCALL: socket(AF_INET, SOCK_STREAM, 0) + bind() + listen()
-    // listener é o socket em estado LISTEN aguardando SYN packets
-    // Internamente, o kernel usa um file descriptor (FD) para rastrear este socket
-    listener net.Listener
+	// SYSCALL: socket(AF_INET, SOCK_STREAM, 0) + bind() + listen()
+	// listener é o socket em estado LISTEN aguardando SYN packets
+	// Internamente, o kernel usa um file descriptor (FD) para rastrear este socket
+	listener net.Listener
 
 	// Mutex protege acesso concorrente aos mapas compartilhados
 	// Previne race conditions em leituras/escritas simultâneas
@@ -47,8 +46,8 @@ type Server struct {
 	broadcastChan chan map[string]int
 
 	// Controle de votação
-    votingState    VotingState
-    votingDeadline time.Time
+	votingState    VotingState
+	votingDeadline time.Time
 }
 
 // NewServer inicializa o servidor com opções de voto e modo de operação.
@@ -116,51 +115,51 @@ func (s *Server) Start(port string) {
 
 // StartVoting inicia a votação com tempo limite em segundos
 func (s *Server) StartVoting(durationSeconds int) {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    
-    if s.votingState != VotingNotStarted {
-        log.Println("Votação já foi iniciada anteriormente")
-        return
-    }
-    
-    s.votingState = VotingActive
-    s.votingDeadline = time.Now().Add(time.Duration(durationSeconds) * time.Second)
-    
-    log.Printf("Votação INICIADA. Deadline: %s", s.votingDeadline.Format("15:04:05"))
-    
-    // Notifica todos os clientes
-    announcement := fmt.Sprintf("VOTACAO_INICIADA: %d segundos. Opcoes: [%s]\n", 
-        durationSeconds, s.options.DisplayString)
-    
-    for _, conn := range s.clients {
-        conn.Write([]byte(announcement))
-    }
-    
-    // Timer para encerrar automaticamente
-    time.AfterFunc(time.Duration(durationSeconds)*time.Second, func() {
-        s.endVoting()
-    })
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.votingState != VotingNotStarted {
+		log.Println("Votação já foi iniciada anteriormente")
+		return
+	}
+
+	s.votingState = VotingActive
+	s.votingDeadline = time.Now().Add(time.Duration(durationSeconds) * time.Second)
+
+	log.Printf("Votação INICIADA. Deadline: %s", s.votingDeadline.Format("15:04:05"))
+
+	// Notifica todos os clientes
+	announcement := fmt.Sprintf("VOTACAO_INICIADA: %d segundos. Opcoes: [%s]\n",
+		durationSeconds, s.options.DisplayString)
+
+	for _, conn := range s.clients {
+		conn.Write([]byte(announcement))
+	}
+
+	// Timer para encerrar automaticamente
+	time.AfterFunc(time.Duration(durationSeconds)*time.Second, func() {
+		s.endVoting()
+	})
 }
 
 // endVoting encerra a votação e envia resultado final
 func (s *Server) endVoting() {
-    s.mu.Lock()
-    defer s.mu.Unlock()
-    
-    if s.votingState != VotingActive {
-        return
-    }
-    
-    s.votingState = VotingEnded
-    log.Println("Votação ENCERRADA")
-    
-    // Resultado final
-    result := fmt.Sprintf("VOTACAO_ENCERRADA: %v\n", s.voteCounts)
-    
-    for _, conn := range s.clients {
-        conn.Write([]byte(result))
-    }
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.votingState != VotingActive {
+		return
+	}
+
+	s.votingState = VotingEnded
+	log.Println("Votação ENCERRADA")
+
+	// Resultado final
+	result := fmt.Sprintf("VOTACAO_ENCERRADA: %v\n", s.voteCounts)
+
+	for _, conn := range s.clients {
+		conn.Write([]byte(result))
+	}
 }
 
 // handleClient processa um cliente conectado em goroutine dedicada.
@@ -191,28 +190,29 @@ func (s *Server) handleClient(conn net.Conn) {
 	s.clients[id] = conn
 
 	// Envia status da votação
-    var statusMsg string
-    switch s.votingState {
-    case VotingNotStarted:
-        statusMsg = "Aguardando inicio da votacao...\n"
-    case VotingActive:
-        remaining := time.Until(s.votingDeadline).Round(time.Second)
-        statusMsg = fmt.Sprintf("Votacao em andamento! Tempo restante: %s\nOpcoes: [%s]\n", 
-            remaining, s.options.DisplayString)
-    case VotingEnded:
-        statusMsg = fmt.Sprintf("Votacao encerrada. Resultado: %v\n", s.voteCounts)
-    }
+	var statusMsg string
+	switch s.votingState {
+	case VotingNotStarted:
+		statusMsg = "Aguardando inicio da votacao...\n"
+	case VotingActive:
+		remaining := time.Until(s.votingDeadline).Round(time.Second)
+		statusMsg = fmt.Sprintf("Votacao em andamento! Tempo restante: %s\nOpcoes: [%s]\n",
+			remaining, s.options.DisplayString)
+	case VotingEnded:
+		statusMsg = fmt.Sprintf("Votacao encerrada. Resultado: %v\n", s.voteCounts)
+	}
 
 	s.mu.Unlock()
 
 	log.Printf("Conectado: %s", id)
 
 	welcomeMsg := fmt.Sprintf("Bem-vindo! Opcoes disponiveis: [%s]. Digite: VOTE [Opcao]\n", s.options.DisplayString)
-	
+
+	fullMessage := statusMsg + welcomeMsg
+
 	// SYSCALL: write(fd, buffer, len)
 	// Escreve no TCP send buffer do kernel
-	// Kernel fragmenta em segmentos TCP (MSS ~1460 bytes) e envia
-	conn.Write([]byte(welcomeMsg))
+	conn.Write([]byte(fullMessage))
 
 	// Loop de leitura de comandos
 	for {
@@ -240,65 +240,65 @@ func (s *Server) processVote(id, option string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	conn := s.clients[id]  // Guarda referência para enviar respostas
+	conn := s.clients[id] // Guarda referência para enviar respostas
 
-    // VALIDAÇÃO 1: Votação não iniciada
-    if s.votingState == VotingNotStarted {
-        conn.Write([]byte("ERRO: Votacao nao iniciada\n"))
-        log.Printf("Voto rejeitado (%s): votação não iniciada", id)
-        return  // ← defer garante que mutex será liberado
-    }
+	// VALIDAÇÃO 1: Votação não iniciada
+	if s.votingState == VotingNotStarted {
+		conn.Write([]byte("ERRO: Votacao nao iniciada\n"))
+		log.Printf("Voto rejeitado (%s): votação não iniciada", id)
+		return // ← defer garante que mutex será liberado
+	}
 
-    // VALIDAÇÃO 2: Votação já encerrada
-    if s.votingState == VotingEnded {
-        conn.Write([]byte("ERRO: Votacao encerrada\n"))
-        log.Printf("Voto rejeitado (%s): votação encerrada", id)
-        return
-    }
+	// VALIDAÇÃO 2: Votação já encerrada
+	if s.votingState == VotingEnded {
+		conn.Write([]byte("ERRO: Votacao encerrada\n"))
+		log.Printf("Voto rejeitado (%s): votação encerrada", id)
+		return
+	}
 
-    // VALIDAÇÃO 3: Tempo limite expirado
-    if time.Now().After(s.votingDeadline) {
-        conn.Write([]byte("ERRO: Tempo limite expirado\n"))
-        log.Printf("Voto rejeitado (%s): tempo expirado", id)
-        // Encerra votação (este método já tem seu próprio Lock/Unlock)
-        go s.endVoting()  // ← async para evitar deadlock
-        return
-    }
+	// VALIDAÇÃO 3: Tempo limite expirado
+	if time.Now().After(s.votingDeadline) {
+		conn.Write([]byte("ERRO: Tempo limite expirado\n"))
+		log.Printf("Voto rejeitado (%s): tempo expirado", id)
+		// Encerra votação (este método já tem seu próprio Lock/Unlock)
+		go s.endVoting() // ← async para evitar deadlock
+		return
+	}
 
-    // VALIDAÇÃO 4: Voto duplicado
-    if _, jaVotou := s.votes[id]; jaVotou {
-        conn.Write([]byte("ERRO: Voto duplicado\n"))
-        log.Printf("Voto rejeitado (%s): já votou", id)
-        return
-    }
+	// VALIDAÇÃO 4: Voto duplicado
+	if _, jaVotou := s.votes[id]; jaVotou {
+		conn.Write([]byte("ERRO: Voto duplicado\n"))
+		log.Printf("Voto rejeitado (%s): já votou", id)
+		return
+	}
 
 	// VALIDAÇÃO 5: Opção inválida
-    isValid := false
-    for _, validOption := range s.options.List {
-        if option == validOption {
-            isValid = true
-            break
-        }
-    }
+	isValid := false
+	for _, validOption := range s.options.List {
+		if option == validOption {
+			isValid = true
+			break
+		}
+	}
 
-    if !isValid {
-        conn.Write([]byte(fmt.Sprintf("ERRO: Opcao invalida. Use: [%s]\n", s.options.DisplayString)))
-        log.Printf("Voto rejeitado (%s): opção inválida '%s'", id, option)
-        return
-    }
+	if !isValid {
+		conn.Write([]byte(fmt.Sprintf("ERRO: Opcao invalida. Use: [%s]\n", s.options.DisplayString)))
+		log.Printf("Voto rejeitado (%s): opção inválida '%s'", id, option)
+		return
+	}
 
-    // VOTO VÁLIDO - Registra
-    s.votes[id] = option
-    s.voteCounts[option]++
+	// VOTO VÁLIDO - Registra
+	s.votes[id] = option
+	s.voteCounts[option]++
 
-    // CONFIRMAÇÃO para o cliente
-    confirmation := fmt.Sprintf("OK: Voto registrado -> %s\n", option)
-    conn.Write([]byte(confirmation))
-    log.Printf("Voto aceito: %s -> %s", id, option)
+	// CONFIRMAÇÃO para o cliente
+	confirmation := fmt.Sprintf("OK: Voto registrado -> %s\n", option)
+	conn.Write([]byte(confirmation))
+	log.Printf("Voto aceito: %s -> %s", id, option)
 
 	if s.useAsyncBroadcast {
 		// MODO ASSÍNCRONO: Evita I/O bloqueante com mutex travado
-		
+
 		// Snapshot do placar (cópia profunda evita race conditions)
 		snapshot := make(map[string]int, len(s.voteCounts))
 		for k, v := range s.voteCounts {
@@ -310,7 +310,7 @@ func (s *Server) processVote(id, option string) {
 		s.broadcastChan <- snapshot
 	} else {
 		// MODO BLOQUEANTE: I/O de rede com mutex travado
-		// PROBLEMA: Se conn.Write() bloquear (cliente lento), 
+		// PROBLEMA: Se conn.Write() bloquear (cliente lento),
 		// toda votação trava (mutex não é liberado)
 		s.broadcastLocked()
 	}
@@ -320,7 +320,7 @@ func (s *Server) processVote(id, option string) {
 func (s *Server) broadcastLocked() {
 	log.Println("[SYNC] Iniciando broadcast síncrono (MUTEX LOCK)")
 	padding := strings.Repeat("\x00", 256*1024) // 256KB
-    msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", s.voteCounts, padding)
+	msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", s.voteCounts, padding)
 
 	for id, conn := range s.clients {
 		if _, votou := s.votes[id]; votou {
@@ -328,16 +328,16 @@ func (s *Server) broadcastLocked() {
 			// (cliente não lê dados, sliding window = 0)
 			// Mutex permanece travado durante bloqueio = servidor congelado
 			log.Printf("[SYNC] Tentando enviar para %s...", id)
-            n, err := conn.Write([]byte(msg))
-            
-            if err != nil {
-                log.Printf("[SYNC] ERRO ao enviar para %s: %v", id, err)
-            } else if n < len(msg) {
-                log.Printf("[SYNC] PARCIAL para %s: enviados %d/%d bytes", 
-                    id, n, len(msg))
-            } else {
-                log.Printf("[SYNC] Sucesso para %s: %d bytes", id, n)
-            }
+			n, err := conn.Write([]byte(msg))
+
+			if err != nil {
+				log.Printf("[SYNC] ERRO ao enviar para %s: %v", id, err)
+			} else if n < len(msg) {
+				log.Printf("[SYNC] PARCIAL para %s: enviados %d/%d bytes",
+					id, n, len(msg))
+			} else {
+				log.Printf("[SYNC] Sucesso para %s: %d bytes", id, n)
+			}
 		}
 	}
 	log.Println("[SYNC] Fim do broadcast síncrono")
@@ -348,36 +348,41 @@ func (s *Server) broadcastWorker() {
 	// Consome canal em loop infinito
 	// Bloqueia (sem consumir CPU) quando canal vazio
 	for update := range s.broadcastChan {
-		log.Println("[ASYNC] Iniciando broadcast assíncrono")
-
 		// DESCOMENTE para simular broadcast com mensagem gigante (256KB)
-        // Útil para demonstrar que modo async não trava mesmo com cliente lento
+		// Útil para demonstrar que modo async não trava mesmo com cliente lento
 
-        // padding := strings.Repeat("\x00", 256*1024) // 256KB
-        // msg = fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", update, padding)
-        // log.Printf("[ASYNC] Modo LARGE PAYLOAD")
-
+		padding := strings.Repeat("\x00", 256*1024) // 256KB
+		msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", update, padding)
+		log.Printf("[ASYNC] Modo LARGE PAYLOAD")
 		// COMENTAR ESSA LINHA PARA FAZER A SIMULACAO
-		msg := fmt.Sprintf("UPDATE: %v\n", update)
+		// msg := fmt.Sprintf("UPDATE: %v\n", update)
 
 		msgBytes := []byte(msg)
 
 		// Mutex travado apenas durante leitura do mapa de clientes
 		s.mu.Lock()
-		
-		// Snapshot de clientes para envio fora da seção crítica
-		// (solução ideal seria copiar clientes também, mas didaticamente aceitável)
+
+		targets := make([]net.Conn, 0, len(s.clients))
+
 		for id, conn := range s.clients {
 			if _, votou := s.votes[id]; votou {
-				// SYSCALL: write(fd, buffer, len)
-				// Pode bloquear aqui, mas não trava votações
-				// (goroutines de voto já liberaram mutex)
-				conn.Write(msgBytes)
+				targets = append(targets, conn)
 			}
 		}
-		
+
 		s.mu.Unlock()
 
+		log.Println("[ASYNC] Iniciando broadcast assíncrono")
+		// Snapshot de clientes para envio fora da seção crítica
+		for _, conn := range targets {
+			// SYSCALL: write(fd, buffer, len)
+			// Pode bloquear aqui, mas não trava votações
+			// (goroutines de voto já liberaram mutex)
+			_, err := conn.Write(msgBytes)
+			if err != nil {
+				log.Printf("Erro no broadcast para um cliente: %v", err)
+			}
+		}
 		log.Println("[ASYNC] Fim do broadcast assíncrono")
 	}
 }

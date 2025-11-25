@@ -28,11 +28,11 @@ func main() {
 	srv := server.NewServer(true, opcoes)
 
 	// Inicia votação após 5 segundos com duração de 60 segundos
-    go func() {
-        time.Sleep(5 * time.Second)
-        fmt.Println("Iniciando votação (120 segundos)...")
-        srv.StartVoting(120)
-    }()
+	go func() {
+		time.Sleep(5 * time.Second)
+		fmt.Println("Iniciando votação (300 segundos)...")
+		srv.StartVoting(300)
+	}()
 
 	srv.Start(":9000")
 }
