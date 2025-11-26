@@ -8,28 +8,28 @@ Este documento apresenta uma visão clara, direta e essencial da arquitetura do 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                           CLIENTES                           │
-│   Client 1   Client 2   Client 3   ...   Client N            │
+│                           CLIENTES                          │
+│   Client 1   Client 2   Client 3   ...   Client N           │
 └─────────────────────────────────────────────────────────────┘
                               │ TCP/IP
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     SERVIDOR (Port 9000)                     │
+│                     SERVIDOR (Port 9000)                    │
 │                                                             │
-│  Main Goroutine                                              │
-│  └── listener.Accept()                                       │
-│        └── go handleClient(conn)                             │
+│  Main Goroutine                                             │
+│  └── listener.Accept()                                      │
+│        └── go handleClient(conn)                            │
 │                                                             │
-│  Cada cliente → 1 goroutine própria                          │
+│  Cada cliente → 1 goroutine própria                         │
 │                                                             │
-│  Estruturas protegidas por mutex:                            │
-│    - clients: conexões ativas                                │
-│    - votes: voto de cada cliente                             │
-│    - voteCounts: contagem global                             │
+│  Estruturas protegidas por mutex:                           │
+│    - clients: conexões ativas                               │
+│    - votes: voto de cada cliente                            │
+│    - voteCounts: contagem global                            │
 │                                                             │
-│  Broadcast:                                                  │
-│    - Modo Sync (bloqueante)                                  │
-│    - Modo Async (channel + worker dedicado)                  │
+│  Broadcast:                                                 │
+│    - Modo Sync (bloqueante)                                 │
+│    - Modo Async (channel + worker dedicado)                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -165,14 +165,3 @@ Envia atualizações para todos os clientes de forma desacoplada.
 * **Channels para desacoplamento** entre etapas rápidas e lentas.
 * **Snapshot pattern** para garantir segurança e não bloquear o sistema.
 * **I/O assíncrono** para máxima escalabilidade.
-
----
-
-## 📊 Resumo de Performance
-
-| Métrica                    | Sync  | Async      |
-| -------------------------- | ----- | ---------- |
-| Bloqueio no mutex          | Alto  | Quase zero |
-| Throughput                 | Baixo | Altíssimo  |
-| Cliente lento afeta todos? | Sim   | Não        |
-| Escalabilidade             | Ruim  | Excelente  |
