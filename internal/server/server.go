@@ -351,11 +351,11 @@ func (s *Server) broadcastWorker() {
 		// DESCOMENTE para simular broadcast com mensagem gigante (256KB)
 		// Útil para demonstrar que modo async não trava mesmo com cliente lento
 
-		padding := strings.Repeat("\x00", 256*1024) // 256KB
-		msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", update, padding)
-		log.Printf("[ASYNC] Modo LARGE PAYLOAD")
+		// padding := strings.Repeat("\x00", 256*1024) // 256KB
+		// msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", update, padding)
+		// log.Printf("[ASYNC] Modo LARGE PAYLOAD")
 		// COMENTAR ESSA LINHA PARA FAZER A SIMULACAO
-		// msg := fmt.Sprintf("UPDATE: %v\n", update)
+		msg := fmt.Sprintf("UPDATE: %v\n", update)
 
 		msgBytes := []byte(msg)
 
