@@ -145,81 +145,77 @@ go build -o bin/client cmd/client/main.go
 
 ## 🧪 Load Testing <a name="load_testing"></a>
 
-### Running the Test
+The load test simulates a **DoS scenario** where a client connects but stops reading data, causing the TCP Receive Window to close (Zero Window) and filling the buffers.
+
+### ⚙️ Configuration
+
+To switch between operation modes, edit **Line 28** in `cmd/server/main.go`:
+
+```go
+// TRUE = Async Mode (Resilient)
+// FALSE = Sync Mode (Vulnerable)
+srv := server.NewServer(true, opcoes)
+````
+
+### 1\. Scenario A: Synchronous Mode (The Crash)
+
+**Setup:** Set `NewServer(false, ...)` in `cmd/server/main.go`.
+
+**Execution:**
 
 ```bash
 go run test/loadtest.go
 ```
 
-**What it demonstrates:**
+**What happens:**
 
-The test simulates a **real production scenario** where a client stops reading from its TCP socket (common causes: CPU overload, network congestion, application pause).
+1.  The server sends a large 256KB payload (hardcoded in `broadcastLocked`).
+2.  The `BLOCKED_CLIENT` stops reading, filling the TCP buffer.
+3.  The server's `conn.Write()` call at **Line 331** (`internal/server/server.go`) blocks waiting for buffer space.
+4.  **CRITICAL:** Because `s.mu.Lock()` is held during this operation, the **entire server freezes**. No new connections or votes are accepted.
 
-**Test setup:**
-- 1 client that **stops calling `read()`** after voting (buffer fills naturally)
-- 50 normal clients that vote and read broadcasts
-- Server sends **256KB broadcast messages** (realistic payload size)
+**🔎 Verification (Evidence of Freeze):**
+Check the file `logs/server.log`. You will see the logs stop abruptly when trying to send to the blocked client, proving the blocking call occurred inside the mutex lock:
+
+```log
+2025/11/25 23:20:12 [SYNC] Sucesso para BLOCKED_CLIENT: 262182 bytes
+2025/11/25 23:20:12 [SYNC] Fim do broadcast síncrono
+2025/11/25 23:20:13 Conectado: FAST_0
+2025/11/25 23:20:13 Voto aceito: FAST_0 -> A
+2025/11/25 23:20:13 [SYNC] Iniciando broadcast síncrono (MUTEX LOCK)
+2025/11/25 23:20:13 [SYNC] Tentando enviar para BLOCKED_CLIENT...
+# (THE LOGS STOP HERE INDEFINITELY)
+```
+
+### 2\. Scenario B: Asynchronous Mode (Worker Isolation)
+
+**Setup:** Set `NewServer(true, ...)` in `cmd/server/main.go`.
+
+**Required Code Change:**
+To replicate the buffer filling in Async mode (which normally uses small messages), you must enable large payloads in `internal/server/server.go`:
+
+1.  **Uncomment Lines 254-256:** Enables the 256KB padding logic.
+2.  **Comment Line 258:** Disables the standard short message.
+
+**Execution:**
+
+```bash
+go run test/loadtest.go
+```
 
 **What happens:**
 
-1. Blocked client **votes** (enters broadcast recipient list)
-2. Client **stops reading** from socket
-3. TCP receive buffer fills (typical: 128KB capacity)
-4. Server attempts to send 256KB broadcast
-5. Kernel blocks `write()` syscall (standard TCP flow control)
-6. **In sync mode:** Mutex remains locked → **entire server freezes**
-7. **In async mode:** Only worker goroutine blocks → **voting continues normally**
+1.  The `broadcastWorker` attempts to send the large payload.
+2.  It blocks on `conn.Write()` when hitting the full buffer of the blocked client.
+3.  **SUCCESS:** Unlike Sync mode, the **Main Server (Listen/Accept) and Voting Logic continue to function**. Only the broadcast worker is stalled.
 
-**Expected behavior:**
+-----
 
-| Mode | Result |
-|------|--------|
-| **Sync** | Server **freezes** when trying to send to blocked client (mutex locked during I/O) |
-| **Async** | Server **remains responsive** (worker blocks independently) |
-
-**Key insight:** This is **not an attack** — it's TCP working as designed. The problem is the **server's architectural flaw** of holding a mutex during blocking I/O operations.
-
-### Why 256KB Payload?
-
-Normal broadcasts (~30 bytes) would require **thousands of messages** to fill a 128KB TCP buffer.
-
-**Solution:** Use realistic large payloads (256KB) similar to:
-- Game servers: state snapshots (50-500KB)
-- Log aggregation: batched events (100KB-1MB)
-- Video streaming: data chunks (256KB-2MB)
-
-This demonstrates the architectural problem **immediately** rather than after prolonged testing.
-
-### Activating Large Payload Mode
-
-**Sync mode** (already active):
-```go
-// internal/server/server.go line ~310
-padding := strings.Repeat("\x00", 256*1024)
-msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", s.voteCounts, padding)
-```
-
-**Async mode** (commented by default):
-```go
-// internal/server/server.go line ~335
-// Uncomment these lines:
-padding := strings.Repeat("\x00", 256*1024)
-msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", update, padding)
-
-// Comment this line:
-// msg := fmt.Sprintf("UPDATE: %v\n", update)
-```
-
----
-
-### Using netcat for quick tests
-
-```bash
-# Spawn multiple clients
-for i in {1..100}; do  
-  echo "VOTE A" | nc localhost 9000 &  
-done
-```
+> **⚠️ Architectural Note:**
+> This project uses `mu.Lock` and blocking I/O deliberately to demonstrate architectural flaws.
+>
+>   - **In Sync Mode:** The design error is holding a lock during I/O.
+>   - **In Async Mode:** While the main server survives, the worker still blocks. In a real production system, you would implementation `conn.SetWriteDeadline()` to drop slow clients instead of allowing them to hang the delivery pipeline.
 
 ---
 
@@ -315,7 +311,7 @@ It supports two distinct modes of operation.
    - Holding mutex during blocking I/O operations
    - Impact of slow clients on entire system
 
-4. **Professional Solution**
+4. **Solution**
    - Async broadcast using channels
    - Worker goroutine for I/O
    - Snapshot pattern for data consistency
