@@ -27,11 +27,10 @@ Conexões que ainda não concluíram o 3-way handshake.
 ### 🔹 **Accept Queue (estabelecidas)**
 
 Conexões prontas para o Go retirar com `Accept()`.
-Se encher → conexões novas são descartadas.
 
 ---
 
-## 2. `Accept()` → *Entrega um novo fd por cliente*
+## 2. `Accept()` → *Entrega um novo "socket" por cliente* ( Na prática esse conn, possui entre as suas informações um fd que o SO usa na tabela do processo para acessar o endereço de memória do socket )
 
 ```
 conn, _ := listener.Accept()
@@ -46,7 +45,7 @@ O Go chama:
 * Cria **novo fd exclusivo para esse cliente** (ex: `fd=4`).
 * Limite total: **ulimit** (ex: 1024 ou 65536 fds).
 
-Cada cliente = 1 fd + 1 goroutine → Go escala porque goroutines são baratas.
+Cada cliente = 1 socket + 1 goroutine → Go escala porque goroutines são baratas.
 
 ---
 
@@ -63,8 +62,7 @@ Chamado internamente:
 Fluxo:
 
 1. Copia dados para o **TCP send buffer** do kernel.
-2. TCP fragmenta em MSS (~1460 bytes).
-3. Controle de congestionamento decide quando enviar.
+2. Controle de congestionamento decide quando enviar.
 
 ### 🔥 Por que pode bloquear?
 
@@ -76,7 +74,7 @@ Porque **TCP é backpressure**:
 4. **Send buffer do servidor enche.**
 5. `write()` **bloqueia** até liberar espaço.
 
-Esse bloqueio pode durar **segundos**.
+Esse bloqueio pode durar **segundos**, precisa ser tratado.
 
 ---
 
@@ -131,7 +129,7 @@ msg := fmt.Sprintf("UPDATE: %v | SNAPSHOT: %s\n", voteCounts, padding)
 ```
 
 **Resultado:**
-- **1ª ou 2ª mensagem** já excede capacidade do buffer
+- **2ª mensagem** já excede capacidade dos buffers ( Do socket TCP do cliente e do servidor também )
 - `write()` **bloqueia imediatamente**
 - Demonstra problema de design **rapidamente**
 
@@ -151,7 +149,7 @@ time.Sleep(∞)                   // Para de ler
 
 Se não votar, servidor nunca chama `conn.Write()` nele.
 
-### ✅ Solução Arquitetural
+### ✅ Solução Arquitetural Simples para Demonstração
 
 ```go
 mu.Lock()
